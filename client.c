@@ -159,6 +159,8 @@ client_connected_state_func(struct module_instance * this_module)
      ssize_t nread;
      module_state new_state_num = CLIENT_CONNECTED_STATE;
 
+     refresh_activity();
+
      while(new_state_num == CLIENT_CONNECTED_STATE)
      {
 	  pollfd[0].fd = this_module->srv_sock;
@@ -178,6 +180,7 @@ client_connected_state_func(struct module_instance * this_module)
 	  if (!(pollfd[0].revents & POLLIN)) {
 	       /* no request - check inactive timeout */
 	       if (connection_inactive_check() != 0) {
+		       printf("connection incative\n");
 		    new_state_num = CLIENT_ADVERTISE_STATE;
 		    break;
 	       } else {
@@ -188,7 +191,7 @@ client_connected_state_func(struct module_instance * this_module)
 	  /* pollfd[0].revents & POLLIN */
 	  /* read request from controller */
 	  if ((nread = recv(pollfd[0].fd, buf, sizeof(buf), MSG_DONTWAIT)) < 0) {
-	       perror("recv error");
+	       perror("recv");
 	       new_state_num = FAILURE_STATE;
 	  } else if (nread == 0) {
 	       /* controller closed the connection */

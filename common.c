@@ -20,7 +20,7 @@ multicast_listen_mk_sock(struct module_instance * this_module)
 
      memset(&bc_addr, 0, sizeof(bc_addr));
      bc_addr.sin_family = AF_INET;
-     bc_addr.sin_addr.s_addr = htonl(INADDR_ANY);;
+     bc_addr.sin_addr.s_addr = htonl(INADDR_ANY);
      bc_addr.sin_port = htons(CLIENT_BC_PORT);
 
      if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -35,6 +35,18 @@ multicast_listen_mk_sock(struct module_instance * this_module)
 	  perror("setsockopt error");
 	  goto fail_exit;
      }
+     struct in_addr outgoing_addr;
+     outgoing_addr.s_addr = this_module->addr;
+
+     if (setsockopt (sock,
+		     IPPROTO_IP,
+		     IP_MULTICAST_IF,
+		     &outgoing_addr,
+		     sizeof(outgoing_addr)) < 0) {
+	  perror("setsockopt error");
+	  goto fail_exit;
+     }
+
      u_char loop = 0;
      if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
 	  perror("setsockopt error");
@@ -110,7 +122,7 @@ multicast_advertise(struct module_instance * this_module,
 
      if (sendto(bc_sock, buf, sizeof(buf), 0,
 		(struct sockaddr *)&bc_addr, sizeof(bc_addr)) <= 0) {
-	  perror("broadcast sendto fail");
+	  perror("broadcast sendto");
 	  return (-1);
      }
      printf("Advertise\n");

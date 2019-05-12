@@ -220,18 +220,18 @@ disconnect_client:
 }
 
 void
-controller_disconnect_clients(struct module_instance * this_module)
-{
-	client_list_foreach(this_module,
-			    controller_disconnect,
-			    NULL);
-}
-
-void
 controller_client_reply_all(struct module_instance * this_module)
 {
 	client_list_foreach(this_module,
 			    controller_client_reply,
+			    NULL);
+}
+
+void
+controller_disconnect_clients(struct module_instance * this_module)
+{
+	client_list_foreach(this_module,
+			    controller_disconnect,
 			    NULL);
 }
 

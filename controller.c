@@ -38,10 +38,6 @@ controller_disconnect(struct module_instance * client,
 		      void * ignored);
 
 static int
-controller_set_client_pollfd(struct module_instance * client,
-			     void * arg);
-
-static int
 controller_client_reply(struct module_instance * client,
 			void * ignored);
 
@@ -87,7 +83,7 @@ controller_state_func(struct module_instance * this_module)
 
 		controller_populate_poller(this_module, &pollfd[1]);
 
-		if ((ret = poll(pollfd, client_num, POLL_WAIT_MS)) < 0) {
+		if ((ret = poll(pollfd, client_num + 1, POLL_WAIT_MS)) < 0) {
 			/*FAIL*/
 			perror("poll error");
 			goto exit;
@@ -161,18 +157,23 @@ controller_disconnect(struct module_instance * client,
 	return (0);
 }
 
-/* lambda func */
-int
-controller_set_client_pollfd(struct module_instance * client,
-			     void * arg)
+void
+controller_populate_poller(struct module_instance * this_module,
+			   struct pollfd * pollfd)
 {
-	struct pollfd ** pollfd = (struct pollfd**)arg;
-	(*pollfd)->fd = client->srv_sock;
-	(*pollfd)->events = POLLIN;
-	(*pollfd)->revents = 0;
-	client->pollfd = *pollfd;
-	++pollfd;
-	return (0);
+	struct module_instance * client;
+	if (!list_empty(&this_module->list))
+	{
+		/* client may be removed in lamda */
+		list_for_each_entry(client, &this_module->list, list)
+		{
+			pollfd->fd = client->srv_sock;
+			pollfd->events = POLLIN;
+			pollfd->revents = 0;
+			client->pollfd = pollfd;
+			pollfd++;
+		}
+	}
 }
 
 /* lambda func */
@@ -232,15 +233,6 @@ controller_client_reply_all(struct module_instance * this_module)
 	client_list_foreach(this_module,
 			    controller_client_reply,
 			    NULL);
-}
-
-void
-controller_populate_poller(struct module_instance * this_module,
-			   struct pollfd * pollfd)
-{
-	client_list_foreach(this_module,
-			    controller_set_client_pollfd,
-			    &pollfd);
 }
 
 int

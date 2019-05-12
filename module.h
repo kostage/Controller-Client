@@ -34,8 +34,6 @@ struct temp_filter {
 struct module_instance {
 	struct list_head list;
 	int srv_sock;
-	int mc_listen_sock;
-	int mc_send_sock;
 	struct pollfd * pollfd;
 	client_ctrl_state ctrl_state;
 	int err_cnt;

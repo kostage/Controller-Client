@@ -1,0 +1,138 @@
+
+#include "common.h"
+
+#include <unistd.h>
+#include <string.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
+#include "client_list.h"
+
+#define MULTICAST_GROUP "239.255.0.1"
+
+int
+multicast_listen_mk_sock(struct module_instance * this_module)
+{
+     int sock, enable = 1;
+     struct sockaddr_in bc_addr;
+
+     memset(&bc_addr, 0, sizeof(bc_addr));
+     bc_addr.sin_family = AF_INET;
+     bc_addr.sin_addr.s_addr = this_module->addr;
+     bc_addr.sin_port = htons(CLIENT_BC_PORT);
+
+     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	  perror("socket error");
+	  return (-1);
+     }
+     if (bind(sock, (struct sockaddr *)&bc_addr, sizeof(bc_addr)) < 0) {
+	  perror("bind error");
+	  goto fail_exit;
+     }
+     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
+	  perror("setsockopt error");
+	  goto fail_exit;
+     }
+    struct ip_mreq mreq;
+    struct in_addr inaddr;
+    inet_aton(MULTICAST_GROUP, &inaddr);
+    mreq.imr_multiaddr.s_addr = inaddr.s_addr;
+    mreq.imr_interface.s_addr = this_module->addr;
+    if (setsockopt(sock,
+		   IPPROTO_IP,
+		   IP_ADD_MEMBERSHIP,
+		   (char*) &mreq,
+		   sizeof(mreq)
+		) < 0)
+    {
+	    perror("setsockopt multicast");
+	    goto fail_exit;
+    }
+
+     return sock;
+fail_exit:
+     close(sock);
+     return (-1);
+}
+
+int
+multicast_send_mk_sock(struct module_instance * this_module)
+{
+     int sock, enable = 1;
+     struct sockaddr_in bc_addr;
+
+     memset(&bc_addr, 0, sizeof(bc_addr));
+     bc_addr.sin_family = AF_INET;
+     bc_addr.sin_addr.s_addr = this_module->addr;
+     bc_addr.sin_port = 0;
+
+     if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+	  perror("socket error");
+	  return (-1);
+     }
+     if (bind(sock, (struct sockaddr *)&bc_addr, sizeof(bc_addr)) < 0) {
+	  perror("bind error");
+	  goto fail_exit;
+     }
+     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
+	  perror("setsockopt error");
+	  goto fail_exit;
+     }
+     return sock;
+fail_exit:
+     close(sock);
+     return (-1);
+}
+
+int
+multicast_advertise(struct module_instance * this_module,
+		    int bc_sock)
+{
+     char buf[] = "Hello";
+     struct sockaddr_in bc_addr;
+     struct in_addr ipaddr;
+
+     if (inet_aton(MULTICAST_GROUP, &ipaddr) == 0) {
+	  perror("inet_aton");
+	  return (-1);
+     }
+     memset(&bc_addr, 0, sizeof(bc_addr));
+     bc_addr.sin_family = AF_INET;
+     bc_addr.sin_addr.s_addr = ipaddr.s_addr;
+     bc_addr.sin_port = htons(CLIENT_BC_PORT);
+
+     if (sendto(bc_sock, buf, sizeof(buf), 0,
+		(struct sockaddr *)&bc_addr, sizeof(bc_addr)) <= 0) {
+	  perror("broadcast sendto fail");
+	  return (-1);
+     }
+     printf("Advertise\n");
+     return (0);
+}
+
+void
+multicast_receive_adv(struct module_instance * this_module,
+		      int bc_sock)
+{
+     char buf[64];
+     struct sockaddr_in peer_addr;
+     socklen_t addrlen = sizeof(peer_addr);
+
+     memset(&peer_addr, 0, sizeof(peer_addr));
+
+     if (recvfrom(bc_sock,
+		  buf,
+		  sizeof(buf)-1,
+		  MSG_DONTWAIT,
+		  (struct sockaddr *)&peer_addr, &addrlen) > 0)
+     {
+	  // remember peer_addr here
+	  struct module_instance new_peer;
+	  new_peer.addr = peer_addr.sin_addr.s_addr;
+	  if (client_list_add_client(this_module, &new_peer)) {
+		  printf("peer detected: %s\n", inet_ntoa(peer_addr.sin_addr));
+	  }
+     }
+}

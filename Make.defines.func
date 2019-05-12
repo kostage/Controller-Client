@@ -1,0 +1,14 @@
+# Common functions
+
+rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
+
+rsubdirs1=$(sort $(dir $(wildcard $1/*)))
+
+rsubdirs2=$(sort $(dir $(wildcard $1/*) \
+		$(wildcard $1/*/*)))
+
+rsubdirs3=$(sort $(dir $(wildcard $1/*) \
+		$(wildcard $1/*/*) \
+		$(wildcard $1/*/*/*)))
+
+

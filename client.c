@@ -112,7 +112,7 @@ client_advertise_state_func(struct module_instance * this_module)
 	       }
 	  }
 	  /* after polling sockets it's time to attempt
-	     to either advertise client or become a controller */
+	     either advertise client or become a controller */
 	  if ((ctiming = client_check_adv_time(&adver_timer)) == TIME_ADVERTISE)
 	  {
 	       if (multicast_advertise(this_module, mc_listen_sock) < 0) {

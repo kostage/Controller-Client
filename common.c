@@ -20,7 +20,7 @@ multicast_listen_mk_sock(struct module_instance * this_module)
 
      memset(&bc_addr, 0, sizeof(bc_addr));
      bc_addr.sin_family = AF_INET;
-     bc_addr.sin_addr.s_addr = this_module->addr;
+     bc_addr.sin_addr.s_addr = htonl(INADDR_ANY);;
      bc_addr.sin_port = htons(CLIENT_BC_PORT);
 
      if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -32,6 +32,11 @@ multicast_listen_mk_sock(struct module_instance * this_module)
 	  goto fail_exit;
      }
      if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
+	  perror("setsockopt error");
+	  goto fail_exit;
+     }
+     u_char loop = 0;
+     if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop)) < 0) {
 	  perror("setsockopt error");
 	  goto fail_exit;
      }

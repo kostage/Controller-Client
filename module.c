@@ -75,17 +75,9 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	INIT_LIST_HEAD(&this_module.list);
-	this_module.srv_sock = -1;
-	this_module.pollfd = NULL;
-	this_module.ctrl_state = CLIENT_CTRL_FAILURE_STATE;
-	this_module.err_cnt = 0;
+	controller_module_init(&this_module);
 	this_module.addr = options.srcaddr;
 	this_module.primary_controller = options.primary_controller;
-	TEMP_FILTER_INIT(this_module.tfilter);
-	this_module.temp = 0.0f;
-	this_module.light_power = 0.0f;
-	this_module.brightness = 0.0f;
 
 	initial_state = (options.mode == MODULE_CLIENT) ?
 		CLIENT_ADVERTISE_STATE : CONTROLLER_STATE;

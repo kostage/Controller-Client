@@ -33,6 +33,7 @@ struct temp_filter {
 
 struct module_instance {
 	struct list_head list;
+	int list_size;
 	int srv_sock;
 	struct pollfd * pollfd;
 	client_ctrl_state ctrl_state;

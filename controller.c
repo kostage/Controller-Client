@@ -23,8 +23,8 @@ controller_connect_client_mk_sock(struct module_instance * this_module,
 				  struct module_instance * client,
 				  int tout_ms);
 static int
-controller_client_request(struct module_instance * client,
-			  void * ignored);
+controller_client_request(struct module_instance * this_module,
+			  struct module_instance * client);
 
 static void
 controller_client_request_all(struct module_instance * this_module);
@@ -33,16 +33,16 @@ static float
 controller_filter_temp(struct temp_filter * filter,
 		       float temp_value);
 
-static int
-controller_disconnect(struct module_instance * client,
-		      void * ignored);
-
-static int
-controller_client_reply(struct module_instance * client,
-			void * ignored);
+static void
+controller_disconnect(struct module_instance * this_module,
+		      struct module_instance * client);
 
 static void
-controller_disconnect_clients(struct module_instance * this_module);
+controller_disconnect_all(struct module_instance * this_module);
+
+static int
+controller_client_reply(struct module_instance * this_module,
+			struct module_instance * client);
 
 static void
 controller_client_reply_all(struct module_instance * this_module);
@@ -59,15 +59,14 @@ module_state
 controller_state_func(struct module_instance * this_module)
 {
 	module_state new_state_num = CONTROLLER_STATE;
-	int srv_adv_sock = -1;
-	int client_num = 0;
+	int mc_listen_sock = -1;
 	struct pollfd pollfd[MAX_CLIENT_NUM + 1];
 
-	srv_adv_sock =
+	mc_listen_sock =
 		multicast_listen_mk_sock(this_module);
 
-	if (srv_adv_sock < 0) {
-		printf("common_listen_adv_mk_sock() fail\n");
+	if (mc_listen_sock < 0) {
+		printf("multicast_listen_mk_sock() fail\n");
 		return FAILURE_STATE;
 	}
 
@@ -77,13 +76,15 @@ controller_state_func(struct module_instance * this_module)
 	{
 		int ret;
 		/* poll new clients advertising */
-		pollfd[0].fd = srv_adv_sock;
+		pollfd[0].fd = mc_listen_sock;
 		pollfd[0].events = POLLIN;
 		pollfd[0].revents = 0;
 
 		controller_populate_poller(this_module, &pollfd[1]);
 
-		if ((ret = poll(pollfd, client_num + 1, POLL_WAIT_MS)) < 0) {
+		if ((ret = poll(pollfd,
+				this_module->list_size + 1,
+				POLL_WAIT_MS)) < 0) {
 			/*FAIL*/
 			perror("poll error");
 			goto exit;
@@ -105,20 +106,20 @@ controller_state_func(struct module_instance * this_module)
 		}
 	}
 exit:
-	controller_disconnect_clients(this_module);
-	close(srv_adv_sock);
+	controller_disconnect_all(this_module);
+	close(mc_listen_sock);
 	return new_state_num;
 }
 
 /* lambda func */
 int
-controller_client_request(struct module_instance * client,
-			  void * ignored)
+controller_client_request(struct module_instance * this_module,
+			  struct module_instance * client)
 {
 	if (client->ctrl_state == CLIENT_CTRL_REQ_STATE) {
 		// not replied yet
 		if (++client->err_cnt >= CLIENT_MAX_ERR_CNT)
-			controller_disconnect(client, NULL);
+			controller_disconnect(this_module, client);
 	}
 	if (send(client->srv_sock,
 		 GET_DATA_CMD,
@@ -126,7 +127,7 @@ controller_client_request(struct module_instance * client,
 		 0) < 0)
 	{
 		if (++client->err_cnt >= CLIENT_MAX_ERR_CNT)
-			controller_disconnect(client, NULL);
+			controller_disconnect(this_module, client);
 	}
 	client->ctrl_state = CLIENT_CTRL_REQ_STATE;
 	return (0);
@@ -135,9 +136,16 @@ controller_client_request(struct module_instance * client,
 void
 controller_client_request_all(struct module_instance * this_module)
 {
-	client_list_foreach(this_module,
-			    controller_client_request,
-			    NULL);
+	struct module_instance * client;
+	struct module_instance * tmp;
+	if (!list_empty(&this_module->list))
+	{
+		list_for_each_entry_safe(client, tmp, &this_module->list, list)
+		{
+			controller_client_request(this_module,
+						  client);
+		}
+	}
 }
 
 float
@@ -148,13 +156,28 @@ controller_filter_temp(struct temp_filter * filter,
 }
 
 /* lambda func */
-int
-controller_disconnect(struct module_instance * client,
-		      void * ignored)
+void
+controller_disconnect(struct module_instance * this_module,
+		      struct module_instance * client)
 {
 	close(client->srv_sock);
 	client_list_remove(client);
-	return (0);
+	--this_module->list_size;
+}
+
+void
+controller_disconnect_all(struct module_instance * this_module)
+{
+	struct module_instance * client;
+	struct module_instance * tmp;
+	if (!list_empty(&this_module->list))
+	{
+		list_for_each_entry_safe(client, tmp, &this_module->list, list)
+		{
+			controller_disconnect(this_module,
+					      client);
+		}
+	}
 }
 
 void
@@ -164,7 +187,6 @@ controller_populate_poller(struct module_instance * this_module,
 	struct module_instance * client;
 	if (!list_empty(&this_module->list))
 	{
-		/* client may be removed in lamda */
 		list_for_each_entry(client, &this_module->list, list)
 		{
 			pollfd->fd = client->srv_sock;
@@ -178,8 +200,8 @@ controller_populate_poller(struct module_instance * this_module,
 
 /* lambda func */
 int
-controller_client_reply(struct module_instance * client,
-			void * ignored)
+controller_client_reply(struct module_instance * this_module,
+			struct module_instance * client)
 {
 	char buf[64];
 	ssize_t nread;
@@ -215,24 +237,23 @@ controller_client_reply(struct module_instance * client,
 	return (0);
 
 disconnect_client:
-	controller_disconnect(client, NULL);
+	controller_disconnect(this_module, client);
 	return (0);
 }
 
 void
 controller_client_reply_all(struct module_instance * this_module)
 {
-	client_list_foreach(this_module,
-			    controller_client_reply,
-			    NULL);
-}
-
-void
-controller_disconnect_clients(struct module_instance * this_module)
-{
-	client_list_foreach(this_module,
-			    controller_disconnect,
-			    NULL);
+	struct module_instance * client;
+	struct module_instance * tmp;
+	if (!list_empty(&this_module->list))
+	{
+		list_for_each_entry_safe(client, tmp, &this_module->list, list)
+		{
+			controller_client_reply(this_module,
+						client);
+		}
+	}
 }
 
 int
@@ -240,7 +261,6 @@ controller_add_client(struct module_instance * this_module, int sock)
 {
 	char buf[64];
 	int nread;
-	static int client_num = 0;
 	struct sockaddr_in peer_addr;
 	socklen_t addrlen = sizeof(peer_addr);
 	struct module_instance new_peer;
@@ -255,12 +275,13 @@ controller_add_client(struct module_instance * this_module, int sock)
 	if (nread <= 0) {
 		perror("recvfrom error");
 		return (-1);
-	} else if (nread == 0) {
+	}
+	if (this_module->list_size == MAX_CLIENT_NUM) {
 		return (0);
 	}
-	if (client_num == MAX_CLIENT_NUM) {
-		return (0);
-	}
+
+	controller_module_init(&new_peer);
+
 	// remember peer_addr here
 	new_peer.addr = peer_addr.sin_addr.s_addr;
 	if (client_list_lookup_by_inaddr(this_module, new_peer.addr)) {
@@ -281,7 +302,7 @@ controller_add_client(struct module_instance * this_module, int sock)
 	client_list_add_client(this_module, &new_peer);
 
 	printf("peer detected\n");
-	++client_num;
+	++this_module->list_size;
 	return (1);
 }
 
@@ -330,4 +351,21 @@ controller_connect_client_mk_sock(struct module_instance * this_module,
 fail_exit:
 	close(sock);
 	return (-1);
+}
+
+void
+controller_module_init(struct module_instance * this_module)
+{
+	INIT_LIST_HEAD(&this_module->list);
+	this_module->list_size = 0;
+	this_module->srv_sock = -1;
+	this_module->pollfd = NULL;
+	this_module->ctrl_state = CLIENT_CTRL_FAILURE_STATE;
+	this_module->err_cnt = 0;
+	this_module->addr = 0;
+	this_module->primary_controller = 0;
+	TEMP_FILTER_INIT(this_module->tfilter);
+	this_module->temp = 0.0f;
+	this_module->light_power = 0.0f;
+	this_module->brightness = 0.0f;
 }

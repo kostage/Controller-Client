@@ -73,6 +73,14 @@ controller_state_func(struct module_instance * this_module)
 		new_state_num = FAILURE_STATE;
 		goto exit;
 	}
+	
+	srv_listen_sock =
+		client_listen_server_mk_sock(this_module);
+
+	if (srv_listen_sock < 0) {
+		printf("client_listen_server_mk_sock() fail\n");
+		goto exit;
+	}
 
 	if (!this_module->primary_controller)
 	{
@@ -137,7 +145,7 @@ controller_state_func(struct module_instance * this_module)
 			     }
 			}
 			if (!this_module->primary_controller &&
-			     ++pollfdp->revents & POLLIN)
+			    (++pollfdp)->revents & POLLIN)
 			{
 			     new_state_num = CLIENT_CONNECTED_STATE;
 			     break;
@@ -160,7 +168,7 @@ controller_state_func(struct module_instance * this_module)
 	     this_module->srv_sock = accept(srv_listen_sock, NULL, NULL);
 	     if (this_module->srv_sock < 0)
 	     {
-		  perror("accept error");
+		  perror("accept");
 		  new_state_num = FAILURE_STATE;
 		  goto exit;
 	     }

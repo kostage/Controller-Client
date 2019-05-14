@@ -8,7 +8,6 @@
 
 #define MODULE_CLIENT_STR    "client"
 #define MODULE_CONTROLLER_STR    "controller"
-#define MODULE_PRIMARY_IPADDR (0)
 
 static void
 usage(void)
@@ -25,7 +24,6 @@ parse_cmdline (int argc, char **argv, struct module_opts * options)
 	memset(options, 0, sizeof(struct module_opts));
 	/* default value for mode is CLIENT */
 	options->mode = MODULE_CLIENT;
-	options->primary_controller = 0;
 
 	while (1)
 	{
@@ -85,12 +83,6 @@ parse_cmdline (int argc, char **argv, struct module_opts * options)
 		goto errout;
 	}
 
-	if (options->srcaddr == MODULE_PRIMARY_IPADDR) {
-		options->primary_controller = 1;
-	} else {
-		options->primary_controller = 0;
-	}
-  
 	return (0);
   
 errout:

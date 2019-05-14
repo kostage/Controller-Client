@@ -11,7 +11,6 @@ typedef enum {
 struct module_opts {
 	in_addr_t srcaddr;
 	module_mode mode;
-	int primary_controller;
 };
 
 int

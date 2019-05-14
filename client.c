@@ -57,7 +57,6 @@ client_advertise_state_func(struct module_instance * this_module)
      module_state new_state_num = CLIENT_ADVERTISE_STATE;
      int srv_listen_sock = -1;
      int mc_listen_sock = -1;
-     int mc_adv_sock = -1;
      struct pollfd pollfd[2];
 
      if ((srv_listen_sock = client_listen_server_mk_sock(this_module)) < 0) {
@@ -67,12 +66,6 @@ client_advertise_state_func(struct module_instance * this_module)
 
      if ((mc_listen_sock = multicast_listen_mk_sock(this_module)) < 0) {
 	  printf("multicast_listen_mk_sock() fail\n");
-	  new_state_num = FAILURE_STATE;
-	  goto exit;
-     }
-
-     if ((mc_adv_sock = multicast_adv_mk_sock(this_module)) < 0) {
-	  printf("multicast_send_mk_sock() fail\n");
 	  new_state_num = FAILURE_STATE;
 	  goto exit;
      }
@@ -115,7 +108,7 @@ client_advertise_state_func(struct module_instance * this_module)
 	     either advertise client or become a controller */
 	  if ((ctiming = client_check_adv_time(&adver_timer)) == TIME_ADVERTISE)
 	  {
-	       if (multicast_advertise(this_module, mc_adv_sock) < 0) {
+	       if (multicast_advertise(this_module, mc_listen_sock) < 0) {
 		    new_state_num = FAILURE_STATE;
 		    break;
 	       }
@@ -141,8 +134,6 @@ client_advertise_state_func(struct module_instance * this_module)
 	  }
      }
 exit:
-     if (mc_adv_sock > 0)
-	  close(mc_adv_sock);
      if (mc_listen_sock > 0)
 	  close(mc_listen_sock);
      if (srv_listen_sock > 0)

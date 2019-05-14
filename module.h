@@ -38,12 +38,29 @@ struct module_instance {
 	struct pollfd * pollfd;
 	client_ctrl_state ctrl_state;
 	int err_cnt;
-	in_addr_t addr;
+	struct in_addr addr;
+	struct in_addr primary_addr;
 	int primary_controller;
 	struct temp_filter tfilter;
 	float temp;
 	float light_power;
 	float brightness;
 };
+
+#define TEMP_FILTER_INIT(tfilter)
+
+#define MODULE_INIT(this_module)  do {	    \
+     INIT_LIST_HEAD(&(this_module)->list);   \
+     (this_module)->list_size = 0;	     \
+     (this_module)->srv_sock = -1;			     \
+     (this_module)->pollfd = NULL;			      \
+     (this_module)->ctrl_state = CLIENT_CTRL_FAILURE_STATE;	     \
+     (this_module)->err_cnt = 0;				     \
+     (this_module)->primary_controller = 0;			     \
+     TEMP_FILTER_INIT((this_module)->tfilter);			     \
+     (this_module)->temp = 0.0f;				     \
+     (this_module)->light_power = 0.0f;				     \
+     (this_module)->brightness = 0.0f;				     \
+     } while(0);
 
 #endif // _MODULE_H_

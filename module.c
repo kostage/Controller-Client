@@ -17,6 +17,7 @@
 #include "client.h"
 #include "controller.h"
 
+#define PRIMARY_CTRL_ADDR "192.168.0.1"
 
 typedef module_state (*state_func)(struct module_instance *);
 
@@ -25,7 +26,11 @@ typedef module_state (*state_func)(struct module_instance *);
 
 static state_func
 state_func_array[NUM_STATES] = {
+#ifdef CLIENT_NO_LISTEN_PEER_ADVERTISE
+	client_noadv_listen_state_func,
+#else
 	client_advertise_state_func,
+#endif
 	client_connected_state_func,
 	controller_state_func
 };
@@ -75,9 +80,15 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	controller_module_init(&this_module);
-	this_module.addr = options.srcaddr;
+	MODULE_INIT(&this_module);
+	this_module.addr.s_addr = options.srcaddr;
 	this_module.primary_controller = options.primary_controller;
+
+	if (!options.primary_controller) {
+	     /* hardcode primary controller address */
+	     this_module.primary_addr.s_addr
+		  = inet_addr(PRIMARY_CTRL_ADDR);
+	}
 
 	initial_state = (options.mode == MODULE_CLIENT) ?
 		CLIENT_ADVERTISE_STATE : CONTROLLER_STATE;

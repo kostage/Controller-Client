@@ -12,7 +12,7 @@ client_list_lookup_by_inaddr(const struct module_instance * client_list,
      list_find_first(client,
 		     &client_list->list,
 		     list,
-		     addr,
+		     addr.s_addr,
 		     cmp_addr);
      return client;
 }
@@ -21,7 +21,7 @@ int
 client_list_add_client(struct module_instance * client_list,
 		       struct module_instance * new_client)
 {
-     in_addr_t cmp_addr = new_client->addr;
+     in_addr_t cmp_addr = new_client->addr.s_addr;
      struct module_instance * client =
 	  client_list_lookup_by_inaddr(client_list, cmp_addr);
      /* if exist do nothing */

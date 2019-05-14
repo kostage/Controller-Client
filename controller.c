@@ -60,14 +60,29 @@ controller_state_func(struct module_instance * this_module)
 {
 	module_state new_state_num = CONTROLLER_STATE;
 	int mc_listen_sock = -1;
-	struct pollfd pollfd[MAX_CLIENT_NUM + 1];
+	int srv_listen_sock = -1;
+	int mc_adv_sock = -1;
+
+	struct pollfd pollfd[MAX_CLIENT_NUM + 2];
 
 	mc_listen_sock =
 		multicast_listen_mk_sock(this_module);
 
 	if (mc_listen_sock < 0) {
 		printf("multicast_listen_mk_sock() fail\n");
-		return FAILURE_STATE;
+		new_state_num = FAILURE_STATE;
+		goto exit;
+	}
+
+	if (!this_module->primary_controller)
+	{
+		mc_adv_sock =
+		     multicast_adv_mk_sock(this_module);
+		if (mc_adv_sock < 0) {
+		     printf("multicast_adv_mk_sock() fail\n");
+		     new_state_num = FAILURE_STATE;
+		     goto exit;
+		}
 	}
 
 	time_t request_time = time(NULL);
@@ -75,15 +90,35 @@ controller_state_func(struct module_instance * this_module)
 	while(new_state_num == CONTROLLER_STATE)
 	{
 		int ret;
+		struct pollfd * pollfdp = &pollfd[0];
+		int poll_len;
+		if (this_module->primary_controller)
+		{
+		     poll_len = this_module->list_size + 1;
+		} else {
+		     poll_len = this_module->list_size + 2;
+		}
+
 		/* poll new clients advertising */
-		pollfd[0].fd = mc_listen_sock;
-		pollfd[0].events = POLLIN;
-		pollfd[0].revents = 0;
+		pollfdp->fd = mc_listen_sock;
+		pollfdp->events = POLLIN;
+		pollfdp->revents = 0;
+		++pollfdp;
 
-		controller_populate_poller(this_module, &pollfd[1]);
+		if (!this_module->primary_controller)
+		{
+		     pollfdp->fd = srv_listen_sock;
+		     pollfdp->events = POLLIN;
+		     pollfdp->revents = 0;
+		     ++pollfdp;
+		}
 
-		if ((ret = poll(pollfd,
-				this_module->list_size + 1,
+		controller_populate_poller(this_module, pollfdp);
+
+		pollfdp = &pollfd[0];
+
+		if ((ret = poll(pollfdp,
+				poll_len,
 				POLL_WAIT_MS)) < 0) {
 			/*FAIL*/
 			perror("poll error");
@@ -91,23 +126,54 @@ controller_state_func(struct module_instance * this_module)
 		} else if (ret > 0) {
 			/* some activity in sockets */
 			/* peer broadcasting */
-			if (pollfd[0].revents & POLLIN)
+			if (pollfdp->revents & POLLIN)
 			{
 				/* function may silently fail - don't care
 				   no client is added in case of connect failure */
-				controller_add_client(this_module, pollfd[0].fd);
+			     if (controller_add_client(this_module,
+						       pollfd[0].fd)) {
+				  /* client list changed - populate poller again */
+				  continue;
+			     }
+			}
+			if (!this_module->primary_controller &&
+			     ++pollfdp->revents & POLLIN)
+			{
+			     new_state_num = CLIENT_CONNECTED_STATE;
+			     break;
 			}
 			/* serve clients */
 			controller_client_reply_all(this_module);
 		}
 		if ((time(NULL) - request_time) > REQUEST_PERIOD_SEC) {
 			controller_client_request_all(this_module);
+			if (!this_module->primary_controller) {
+			     multicast_advertise(this_module,
+						 mc_adv_sock);
+			}
 			request_time = time(NULL);
 		}
 	}
+	/* if incoming connection from controller
+	   then accept it or fail */
+	if (new_state_num == CLIENT_CONNECTED_STATE) {
+	     this_module->srv_sock = accept(srv_listen_sock, NULL, NULL);
+	     if (this_module->srv_sock < 0)
+	     {
+		  perror("accept error");
+		  new_state_num = FAILURE_STATE;
+		  goto exit;
+	     }
+	}
 exit:
 	controller_disconnect_all(this_module);
-	close(mc_listen_sock);
+	if (mc_adv_sock > 0)
+	     close(mc_adv_sock);
+	if (mc_listen_sock > 0)
+	     close(mc_listen_sock);
+	if (srv_listen_sock > 0)
+	     close(srv_listen_sock);
+
 	return new_state_num;
 }
 
@@ -118,16 +184,18 @@ controller_client_request(struct module_instance * this_module,
 {
 	if (client->ctrl_state == CLIENT_CTRL_REQ_STATE) {
 		// not replied yet
-		if (++client->err_cnt >= CLIENT_MAX_ERR_CNT)
-			controller_disconnect(this_module, client);
+	     if (++client->err_cnt >= CLIENT_MAX_ERR_CNT) {
+		  controller_disconnect(this_module, client);
+	     }
 	}
 	if (send(client->srv_sock,
 		 GET_DATA_CMD,
 		 strlen(GET_DATA_CMD),
 		 0) < 0)
 	{
-		if (++client->err_cnt >= CLIENT_MAX_ERR_CNT)
+	     if (++client->err_cnt >= CLIENT_MAX_ERR_CNT) {
 			controller_disconnect(this_module, client);
+	     }
 	}
 	client->ctrl_state = CLIENT_CTRL_REQ_STATE;
 	return (0);
@@ -163,6 +231,8 @@ controller_disconnect(struct module_instance * this_module,
 	close(client->srv_sock);
 	client_list_remove(client);
 	--this_module->list_size;
+	printf("Client %s disconnect\n",
+	       inet_ntoa(client->addr));
 }
 
 void
@@ -214,8 +284,9 @@ controller_client_reply(struct module_instance * this_module,
 				  sizeof(buf),
 				  MSG_DONTWAIT)) <= 0)
 		{
-			/* error or disconected */
-			perror("recv error\n");
+			/* error or disconnected */
+		     printf("Client %s recv error\n",
+			    inet_ntoa(client->addr));
 			goto disconnect_client;
 		}
 
@@ -224,13 +295,17 @@ controller_client_reply(struct module_instance * this_module,
 		if (ret < 0) {
 			perror("sscanf error");
 			if (++client->err_cnt >= CLIENT_MAX_ERR_CNT) {
-				printf("client disconnect due to errors\n");
 				goto disconnect_client;
 			}
 		}
 		client->temp = controller_filter_temp(&client->tfilter,
 						      temp);
 		client->light_power = light_power;
+
+		printf("Client %s, t = %.2f, l = %.2f\n",
+		       inet_ntoa(client->addr),
+		       client->temp,
+		       client->light_power);
 	}
 	/* reply received = ready to new request */
 	client->ctrl_state = CLIENT_CTRL_RDY_STATE;
@@ -280,11 +355,12 @@ controller_add_client(struct module_instance * this_module, int sock)
 		return (0);
 	}
 
-	controller_module_init(&new_peer);
+	MODULE_INIT(&new_peer);
 
 	// remember peer_addr here
-	new_peer.addr = peer_addr.sin_addr.s_addr;
-	if (client_list_lookup_by_inaddr(this_module, new_peer.addr)) {
+	new_peer.addr.s_addr = peer_addr.sin_addr.s_addr;
+	if (client_list_lookup_by_inaddr(this_module,
+					 new_peer.addr.s_addr)) {
 		return (0);
 	}
 
@@ -301,7 +377,8 @@ controller_add_client(struct module_instance * this_module, int sock)
 	/* add client if its not already in the list */
 	client_list_add_client(this_module, &new_peer);
 
-	printf("peer detected\n");
+	printf("Client detected: %s\n",
+	       inet_ntoa(new_peer.addr));
 	++this_module->list_size;
 	return (1);
 }
@@ -311,7 +388,7 @@ controller_connect_client_mk_sock(struct module_instance * this_module,
 				  struct module_instance * client,
 				  int tout_ms)
 {
-	int sock;
+	int sock = -1;
 	struct sockaddr_in srv_addr, client_addr;
 	struct timeval timeout;
 	timeout.tv_sec  = tout_ms * 1000;
@@ -319,12 +396,12 @@ controller_connect_client_mk_sock(struct module_instance * this_module,
 
 	memset(&srv_addr, 0, sizeof(srv_addr));
 	srv_addr.sin_family = AF_INET;
-	srv_addr.sin_addr.s_addr = this_module->addr; // specific iface
+	srv_addr.sin_addr.s_addr = this_module->addr.s_addr; // specific iface
 	srv_addr.sin_port = 0; // any port
   
 	memset(&client_addr, 0, sizeof(client_addr));
 	client_addr.sin_family = AF_INET;
-	client_addr.sin_addr.s_addr = client->addr;
+	client_addr.sin_addr.s_addr = client->addr.s_addr;
 	client_addr.sin_port = htons(CLIENT_UC_PORT); // any port
 
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -351,21 +428,4 @@ controller_connect_client_mk_sock(struct module_instance * this_module,
 fail_exit:
 	close(sock);
 	return (-1);
-}
-
-void
-controller_module_init(struct module_instance * this_module)
-{
-	INIT_LIST_HEAD(&this_module->list);
-	this_module->list_size = 0;
-	this_module->srv_sock = -1;
-	this_module->pollfd = NULL;
-	this_module->ctrl_state = CLIENT_CTRL_FAILURE_STATE;
-	this_module->err_cnt = 0;
-	this_module->addr = 0;
-	this_module->primary_controller = 0;
-	TEMP_FILTER_INIT(this_module->tfilter);
-	this_module->temp = 0.0f;
-	this_module->light_power = 0.0f;
-	this_module->brightness = 0.0f;
 }

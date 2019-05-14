@@ -148,7 +148,7 @@ controller_state_func(struct module_instance * this_module)
 		if ((time(NULL) - request_time) > REQUEST_PERIOD_SEC) {
 			controller_client_request_all(this_module);
 			if (!this_module->primary_controller) {
-			     multicast_advertise(this_module,
+			     unicast_advertise(this_module,
 						 mc_adv_sock);
 			}
 			request_time = time(NULL);

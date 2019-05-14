@@ -13,38 +13,38 @@
 #define CLIENT_MAX_ERR_CNT (2)
 
 typedef enum {
-	CLIENT_ADVERTISE_STATE = 0,
-	CLIENT_CONNECTED_STATE,
-	CONTROLLER_STATE,
-	NUM_STATES,
-	FAILURE_STATE = -1
+    CLIENT_ADVERTISE_STATE = 0,
+    CLIENT_CONNECTED_STATE,
+    CONTROLLER_STATE,
+    NUM_STATES,
+    FAILURE_STATE = -1
 } module_state;
 
 /* state from controller point of view */
 typedef enum {
-	CLIENT_CTRL_REQ_STATE = 0,
-	CLIENT_CTRL_RDY_STATE,
-	CLIENT_CTRL_FAILURE_STATE = -1
+    CLIENT_CTRL_REQ_STATE = 0,
+    CLIENT_CTRL_RDY_STATE,
+    CLIENT_CTRL_FAILURE_STATE = -1
 } client_ctrl_state;
 
 struct temp_filter {
-	int temp;
+    int temp;
 };
 
 struct module_instance {
-	struct list_head list;
-	int list_size;
-	int srv_sock;
-	struct pollfd * pollfd;
-	client_ctrl_state ctrl_state;
-	int err_cnt;
-	struct in_addr addr;
-	struct in_addr primary_addr;
-	int primary_controller;
-	struct temp_filter tfilter;
-	float temp;
-	float light_power;
-	float brightness;
+    struct list_head list;
+    int list_size;
+    int srv_sock;
+    struct pollfd *pollfd;
+    client_ctrl_state ctrl_state;
+    int err_cnt;
+    struct in_addr addr;
+    struct in_addr primary_addr;
+    int primary_controller;
+    struct temp_filter tfilter;
+    float temp;
+    float light_power;
+    float brightness;
 };
 
 #define TEMP_FILTER_INIT(tfilter)
@@ -63,4 +63,4 @@ struct module_instance {
      (this_module)->brightness = 0.0f;				     \
      } while(0);
 
-#endif // _MODULE_H_
+#endif				// _MODULE_H_

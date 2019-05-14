@@ -5,7 +5,6 @@
 
 #include "module.h"
 
-module_state
-controller_state_func(struct module_instance * this_module);
+module_state controller_state_func(struct module_instance * this_module);
 
-#endif // _CONTROLLER_H_
+#endif				// _CONTROLLER_H_

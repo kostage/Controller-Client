@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <assert.h>
 
 #include "client_list.h"
 #include "common.h"
@@ -166,7 +167,8 @@ client_connected_state_func(struct module_instance * this_module)
 	    } else {		/* process client's request */
 		int ret;
 		if ((ret = client_process_request(this_module, buf)) < 0)
-		    new_state_num = FAILURE_STATE;
+		    /* disconnect */
+		    new_state_num = CLIENT_ADVERTISE_STATE;
 		else if (ret > 0)
 		    refresh_activity();
 	    }
@@ -197,12 +199,12 @@ client_process_request(struct module_instance *this_module, char *request)
 		       sizeof(reply),
 		       "%.2f, %.2f",
 		       this_module->temp, this_module->light_power);
-	if (ret < 0 || ret >= sizeof(reply))
-	    return (-1);
+	assert(ret > 0 && ret < sizeof(reply));
     } else {
 	return 0;
     }
     if (send(this_module->srv_sock, reply, ret, 0) != ret) {
+	/* connection faliure */
 	perror("client reply error");
 	return (-1);
     }

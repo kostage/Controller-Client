@@ -70,19 +70,17 @@ module_state controller_state_func(struct module_instance *this_module)
 	goto exit;
     }
 
-    srv_listen_sock = client_listen_server_mk_sock(this_module);
-
-    if (srv_listen_sock < 0) {
-	printf("client_listen_server_mk_sock() fail\n");
-	goto exit;
-    }
-
     if (!this_module->primary_controller) {
 	mc_adv_sock = multicast_adv_mk_sock(this_module);
 	if (mc_adv_sock < 0) {
 	    printf("multicast_adv_mk_sock() fail\n");
 	    new_state_num = FAILURE_STATE;
 	    goto exit;
+	}
+	srv_listen_sock = client_listen_server_mk_sock(this_module);
+	if (srv_listen_sock < 0) {
+	     printf("client_listen_server_mk_sock() fail\n");
+	     goto exit;
 	}
     }
 

@@ -17,12 +17,14 @@
 #include "client.h"
 #include "controller.h"
 
-#define PRIMARY_CTRL_ADDR "192.168.0.213"
+#define PRIMARY_CTRL_ADDR "192.168.0.102"
 
 typedef module_state(*state_func) (struct module_instance *);
 
 /* Decalarations of state funcs,
    each returns new state num */
+
+// #define CLIENT_NO_LISTEN_PEER_ADVERTISE
 
 static state_func state_func_array[NUM_STATES] = {
 #ifdef CLIENT_NO_LISTEN_PEER_ADVERTISE
